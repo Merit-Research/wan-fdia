@@ -47,8 +47,8 @@ get_good_buildings = function(X, from, to, beta = 0.05){
   return(Y)
 }
 
-view_buildings<-function(url_KW='/Users/mgkallit/Dropbox/research_merit/grants/satc14/src/buildings_UM_analysis_code/um_buildings_watts_aggregates_with_names.csv',
-                         url_Bnames='/Users/mgkallit/Dropbox/research_merit/grants/satc14/src/buildings_UM_analysis_code/Bnames.csv', days=7, bldgs=c(1:10), savefigs =  FALSE){
+view_buildings<-function(url_KW='um_buildings_watts_aggregates_with_names.csv',
+                         url_Bnames='buildings_UM_analysis_code/Bnames.csv', days=7, bldgs=c(1:10), savefigs =  FALSE){
   #   Function that displays the consumption time series of some buildings
   #   url_KW=url of the kilowatt usage file
   #   url_Bnames=url of building name file with their corresponding numbers
