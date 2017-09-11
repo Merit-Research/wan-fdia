@@ -47,8 +47,8 @@ get_good_buildings = function(X, from, to, beta = 0.05){
   return(Y)
 }
 
-view_buildings<-function(url_KW='um_buildings_watts_aggregates_with_names.csv',
-                         url_Bnames='buildings_UM_analysis_code/Bnames.csv', days=7, bldgs=c(1:10), savefigs =  FALSE){
+view_buildings<-function(url_KW='/Users/mgkallit/Dropbox/research_merit/grants/satc14/src/buildings_UM_analysis_code/um_buildings_watts_aggregates_with_names.csv',
+                         url_Bnames='/Users/mgkallit/Dropbox/research_merit/grants/satc14/src/buildings_UM_analysis_code/Bnames.csv', days=7, bldgs=c(1:10), savefigs =  FALSE){
   #   Function that displays the consumption time series of some buildings
   #   url_KW=url of the kilowatt usage file
   #   url_Bnames=url of building name file with their corresponding numbers
@@ -113,6 +113,7 @@ explore_acf <- function(X, bldg=1, days=1, deseason = FALSE){
   par(mfrow=c(4,1))
   plot.ts(smooth(smooth(X[(10*d):((10+days)*d),b])), col="red", main = colnames(X)[b], ylab = 'Power Consumption (Watts)')
   Yd = high_pass_filter(X[(10*d):((10+days)*d),b],type="diff") 
+  #Ys = high_pass_filter(X[(10*d):((10+days)*d),b],type="spencer15") 
   
   if (days>1 && deseason == TRUE){
     print(days)
@@ -122,6 +123,8 @@ explore_acf <- function(X, bldg=1, days=1, deseason = FALSE){
   }
   acf(Yd, 720, ylim = c(-0.2, .4), main = "ACF of detrended (with diff) signal") 
   pacf(Yd[8:(length(Yd)-8)], 720, ylim = c(-0.2, .4), main = "Partial-ACF of detrended (with diff) signal") 
+  #acf(Ys[8:(length(Ys)-8)], 720, ylim = c(-0.2, .4), main = "ACF of detrended (with Spencer15) signal") # add and subtract 8 to avoid the N values that Spencer15 filtering yields
+  #pacf(Ys[8:(length(Ys)-8)], 720, ylim = c(-0.2, .4), main = "Partial-ACF of detrended (with Spencer15) signal") 
 }
 
 explore_and_safe_acf <- function(X, bldg=c(1:8), days=1){
@@ -132,6 +135,7 @@ explore_and_safe_acf <- function(X, bldg=c(1:8), days=1){
     
     pdf(paste(c("./figures/acf-building-", b, ".pdf"), collapse = ""))
     par(mfrow=c(4,1))
+    #par(mar = c(0, 0, 0, 0), oma = c(4, 4, 0.5, 0.5))
     plot.ts(smooth(smooth(X[(10*d):((10+days)*d),b])), col="red", main = colnames(X)[b], ylab = 'Power Consumption (Watts)')
     Yd = high_pass_filter(X[(10*d):((10+days)*d),b],type="diff") 
     
@@ -187,6 +191,7 @@ ewma = function(zscores, lam = 0.84, L = 3.719, two_in_a_row_rule = FALSE){
   lambda = lam; sigma_l = sqrt(lambda/(2 - lambda)); THRESHOLD = sigma_l*L
   z = zscores
   if (two_in_a_row_rule == TRUE){
+  #cat("I'm in the two-in-a-row rule block now. Greetings!\n")
   # Hypothesis testing
   Sn_1 = 0; Sn = 0; alerts = rep(0,length(z)); two_inrow_flag = 0
   for (t in c(1:length(z))){
@@ -236,7 +241,35 @@ inject_anomalies = function(X, bldg, from, duration, magnitude){
   N = dim(X)[1]; k = dim(X)[2]
   stopifnot(duration < N)
   stopifnot(bldg <= k)
-  X[(from):(from+duration), bldg] = X[(from):(from+duration), bldg] + magnitude * sd(X[, bldg])
+  X[(from):(from+duration-1), bldg] = X[(from):(from+duration-1), bldg] + magnitude * sd(X[, bldg])
+  return(X) # returns the data with injected anomalies
+}
+
+inject_anomalies2 = function(X, bldg, from, duration, magnitude){
+  # X: the slice of the data matrix in which anomalies will be injected
+  # bldg: the buildings to inject anomalies into
+  # from: inject anomalies starting at time point 'from'
+  # duration: duration (in time slots of 2-mins) of anomalies
+  # magnitude: magnitude of injected anomalies -- constant shift
+  N = dim(X)[1]; k = dim(X)[2]
+  stopifnot(duration < N)
+  stopifnot(bldg <= k)
+  X[(from):(from+duration-1), bldg] = X[(from):(from+duration-1), bldg] + magnitude 
+  #cat("Injecting ", magnitude, " Watts", "(actual series has sigma ", sd(X[, bldg]), "Watts) \n")
+  return(X) # returns the data with injected anomalies
+}
+
+inject_anomalies3 = function(X, bldg, from, duration, magnitude){
+  # X: the slice of the data matrix in which anomalies will be injected
+  # bldg: the buildings to inject anomalies into
+  # from: inject anomalies starting at time point 'from'
+  # duration: duration (in time slots of 2-mins) of anomalies
+  # magnitude: magnitude of injected anomalies in terms of the bldg's ROBUST standard deviation (R function mad()). Eg, magintude = 0.5 will inject
+  #            anomalies of size 0.5 * robust_sigma_bldg
+  N = dim(X)[1]; k = dim(X)[2]
+  stopifnot(duration < N)
+  stopifnot(bldg <= k)
+  X[(from):(from+duration-1), bldg] = X[(from):(from+duration-1), bldg] + magnitude * mad(X[, bldg])
   return(X) # returns the data with injected anomalies
 }
 
@@ -369,7 +402,7 @@ arma_modeling <- function (data, bldg = bldg, max.p = 20, plot.tsdiag = FALSE){
   }
   
   if (best > 0){
-    cat("We have a good model! This is model that ranked ", best, " and is an AR(",m$arma[1],") model.\n")
+    cat("We have a good model! Horay! This is model that ranked ", best, " and is an AR(",m$arma[1],") model.\n")
     best.model = m
   }else{
     cat("All models failed goodness-of-fits tests. Using the one with higher BIC anyways...\n")
@@ -399,7 +432,7 @@ do_forecast <- function (X, fitted_model, offset = 0, from_day, to_day){
   bldg = fitted_model$b
   stopifnot(from_day < to_day)
   from = (offset + from_day) *720; to = (offset + to_day) * 720; 
-  Y_test = diff(X[from:to, bldg]);  X_test = X[from:to, bldg];
+  Y_test = (X[from:to, bldg]);  X_test = X[from:to, bldg];
   x0  = X_test[1] # we need x0 for doing predictions
   
   #Note: To forecast using the same parameters on different data, you might try "refitting" 
@@ -433,16 +466,14 @@ do_forecast <- function (X, fitted_model, offset = 0, from_day, to_day){
   return(X_pred)
 }
 
-do_detection <- function (X, bldg = bldg, fitted_model, offset = 0, from_day, to_day, significance_level=0.05){
+do_detection <- function (X, bldg = bldg, fitted_model,significance_level=0.05){
   # fitted_model <- list returned by arma_modeling() above
   # from_day <- do forecasts from this day
   # to_day  <- do forecasts until this day
   # significance_level <- the level of significance; eg, 0.05. 
   
   fit = fitted_model$fit
-  stopifnot(from_day < to_day)
-  from = (offset + from_day) *720; to = (offset + to_day) * 720; 
-  Y_test = X[from:to, bldg]
+  Y_test = X[, bldg]
   
   #Note: To forecast using the same parameters on different data, you might try "refitting" 
   #      the same model on new data but fix the parameters 
@@ -539,7 +570,7 @@ model_selection = function(data, criterion, maxp, log.file = "/dev/null", refine
   }
   
   if (best > 0){
-    cat("We have a good model! This is model that ranked ", best, " and is a VAR(",m$order,") model.\n")
+    cat("We have a good model! Horay! This is model that ranked ", best, " and is a VAR(",m$order,") model.\n")
     best.model = m
   }else{
     cat("All models failed goodness-of-fits tests. Using the BIC one that ranked top anyways...\n")
@@ -553,11 +584,10 @@ model_selection = function(data, criterion, maxp, log.file = "/dev/null", refine
   return(best.model)
 }
 
-do_VAR_detection <- function (Y, cluster, fitted_model, offset = 0, from_day, to_day, significance_level=0.05){
+do_VAR_detection <- function (Y, cluster, fitted_model, significance_level=0.05){
   # X: the input data (should be differenced/detrended)
   # cluster: the set of buildings in the VAR model
   # fitted_model <- selected VAR model, eg. via the model_selection() function above
-  # from_day <- do forecasts from this day;   # to_day  <- do forecasts until this day
   # significance_level <- the level of significance; eg, 0.05. 
   # Example usage:
   # Yc = Y[1:(5*720), c(1,2)]; Ycc = diff((Yc))
@@ -566,10 +596,9 @@ do_VAR_detection <- function (Y, cluster, fitted_model, offset = 0, from_day, to
   # res = do_VAR_detection(diff(Y), cluster = c(1,2), fitted_model = m, from_day = 5, to_day = 6)
   
   d = 720 # we have 720 observations in a day
-  stopifnot(from_day < to_day); from = (offset + from_day) *d; to = (offset + to_day) * d; 
   m = fitted_model
   bldg = cluster
-  Y_test = Y[from:to, bldg];  N = dim(Y_test)[1]; k = dim(Y_test)[2] 
+  Y_test = Y[, bldg];  N = dim(Y_test)[1]; k = dim(Y_test)[2] 
   
   #Note: Use the m$Phi matrix coefficients for predictions
   p = m$order
@@ -824,12 +853,12 @@ dynamic_factors_detection = function(data, fit, significance_level){
 }
 
 # Function for GrangerTest
-granger_compute=function(Y,BLDG,from_day_tr,to_day_tr,n_period=720){
+granger_compute=function(Y,BLDG,from_day_tr,to_day_tr,n_period=720, max.p = 10){
   Ycc=diff(Y[(from_day_tr*n_period+1):(to_day_tr*n_period),])
   p=dim(Ycc)[2]
   G=rep(1,p)
   for (i in setdiff(1:p,BLDG)){
-    maxp = 25
+    maxp = max.p
     capture.output(m1 <- VARorder(Ycc[,c(BLDG,i)], maxp = maxp), file='NUL') # order selection
     capture.output(m_VAR <- model_selection(Ycc[,c(BLDG,i)], m1$bic, maxp), file='NUL')
     granger_outp=capture.output(GrangerTest(Ycc[,c(BLDG,i)],m_VAR$order,include.mean = F))
